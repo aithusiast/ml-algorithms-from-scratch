@@ -21,6 +21,8 @@ class LogisticRegression:
 
         self.coef_: Optional[np.ndarray]= None
         self.intercept_: float= 0.0
+    
+    # _______ Public Methods ________________________________________________________
 
     def fit(
             self,
@@ -51,6 +53,25 @@ class LogisticRegression:
 
         return self
     
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        """
+        This function computes the probabilities of each sample
+        """
+        X = self._validate_predict_input(X)
+        return self._sigmoid(X)
+
+    def predict(self, X: np.ndarray, threshold: float=0.5):
+        """
+        This function predicts the class which the new input belongs to
+        """
+        # Checking threshold value
+        if not 0.0 < threshold < 1.0:
+            raise ValueError(f"Threshold value must be in range (0,1), got {threshold}")
+        
+        return (self.predict_proba(X) >= threshold).astype(int)
+    
+    # _______ Validation Methods ________________________________________________________
+    
     def _validate_predict_input(self, X: np.ndarray) -> np.ndarray:
         """
         This function validate the prediction method input
@@ -73,22 +94,7 @@ class LogisticRegression:
         
         return X
     
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """
-        This function computes the probabilities of each sample
-        """
-        X = self._validate_predict_input(X)
-        return self._sigmoid(X)
-
-    def predict(self, X: np.ndarray, threshold: float=0.5):
-        """
-        This function predicts the class which the new input belongs to
-        """
-        # Checking threshold value
-        if not 0.0 < threshold < 1.0:
-            raise ValueError(f"Threshold value must be in range (0,1), got {threshold}")
-        
-        return (self.predict_proba(X) >= threshold).astype(int)
+    #  _______ Internal Methods ________________________________________________________
 
     def _sigmoid(self, X: np.ndarray) -> np.ndarray:
         """
@@ -186,4 +192,58 @@ class LogisticRegression:
             # Updating weights and bias
             self.coef_ -= self.lr * dj_dw
             self.intercept_ -= self.lr * dj_db
+
+# _______ Evaluation Metrics ________________________________________________________
+
+class Metrics:
+     
+    @staticmethod
+    def compute_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
+        TP = np.sum((y_true == 1) & (y_pred == 1))
+        FP = np.sum((y_true == 0) & (y_pred == 1))
+        FN = np.sum((y_true == 1) & (y_pred == 0))
+        TN = np.sum((y_true == 0) & (y_pred == 0))
+
+        return {
+            'TP': int(TP),
+            'FP': int(FP),
+            'FN': int(FN),
+            'TN': int(TN),
+            'matrix': np.array([
+                [TN, FP],
+                [FN, TP]
+            ])
+        }
     
+    @classmethod
+    def accuracy(cls, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        cm = cls.compute_confusion_matrix(y_true, y_pred)
+        TP = cm['TP']
+        FP = cm['FP']
+        FN = cm['FN']
+        TN = cm['TN']
+
+        return (TP + TN) / (TP + FP + FN + TN)
+
+    @classmethod
+    def precison(cls, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        cm = cls.compute_confusion_matrix(y_true, y_pred)
+        TP = cm['TP']
+        FP = cm['FP']
+
+        return TP / (TP + FP) if (TP + FP) != 0 else 0
+
+    @classmethod
+    def recall(cls, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        cm = cls.compute_confusion_matrix(y_true, y_pred)
+        TP = cm['TP']
+        FN = cm['FN']
+
+        return TP / (TP + FN) if (TP + FN) != 0 else 0
+
+    @classmethod
+    def f1_score(cls, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        p = cls.precison(y_true, y_pred)
+        r = cls.recall(y_true, y_pred)
+
+        return (2 * p * r) / (p + r) if (p + r) != 0 else 0
