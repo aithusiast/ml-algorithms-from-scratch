@@ -23,6 +23,7 @@ Each algorithm lives in its own folder with a dedicated **Python File** covering
 |---|---|
 | Linear Regression | [`linear_regression/`](./linear_regression) |
 | Logistic Regression | [`logistic_regression/`](./logistic_regression) |
+| Decision Trees | [`logistic_regression/`](./decision_trees) |
 
 > More algorithms coming soon — see the roadmap below.
 
@@ -81,6 +82,7 @@ Managed via `pyproject.toml`:
 | `seaborn` | Statistical plots |
 | `pandas` | Data loading and manipulation |
 | `ipykernel` | Jupyter notebook kernel |
+| `sickit-learn` | Only for fetching and loading datasets |
 
 ---
 
@@ -88,7 +90,6 @@ Managed via `pyproject.toml`:
 
 Algorithms planned for implementation:
 
-- [ ] Decision Tree (CART)
 - [ ] Random Forest
 - [ ] K-Nearest Neighbors (KNN)
 - [ ] Support Vector Machine (SVM)
