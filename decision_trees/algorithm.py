@@ -1,44 +1,54 @@
 import numpy as np
-from typing import Optional
 from collections import Counter
-
 
 class DecisionTreeClassifier:
     def __init__(
             self,
-            criterion: str,
             max_depth: int,
             min_samples_split: int,
             min_samples_leaf: int
-    ):
-        if criterion not in ['gini', 'entropy']:
-            raise ValueError(f"Criterion must be 'gini' or 'entropy', got {criterion}!")
-        
+    ):  
         names = ['max_depth', 'min_samples_split', 'min_samples_leaf']
         for num, name in zip([max_depth, min_samples_split, min_samples_leaf], names):
             if num <= 0:
                 raise ValueError(f"{name} must be >0, got {num}!")
             
-        self.criterion= criterion
         self.max_depth= max_depth
         self.min_samples_split= min_samples_split
         self.min_samples_leaf= min_samples_leaf
+        self.root = None
 
     # ---- Public Methods ------------------------------------------------------------------------
-    def fit(self, X_train: np.ndarray, y_train: np.ndarray):
-        pass
+    def fit(self, X_train: np.ndarray, y_train: np.ndarray) -> "DecisionTreeClassifier":
+        X_train, y_train = self._validate_train_data(X_train, y_train)
+        self.n_features = X_train.shape[-1]
+        self.root = self._build_tree(X_train, y_train, depth= 0)
+        return self
+    
+    def predict(self, X: np.ndarray) -> list[int]:
+        X = self._validate_predict_input(X)
+        predictions = [self._predict_one(x) for x in X]
+        return predictions
 
-    def predict(self, X: np.ndarray):
-        pass
+    def print_tree(self, node=None, depth=0, indent="|   "):
+        prefix = indent * depth
+        if node is None:
+            node = self.root
 
-    def predict_proba(self, X: np.ndarray):
-        pass
+        if isinstance(node, Leaf):
+            print(f"{prefix}|--- class: {node.prediction}")
+            return
 
-    def get_rapport(self, y_true: np.ndarray, y_pred: np.ndarray):
-        pass
+        feature_label = f"Feature[{node.feature_idx}]"
+
+        print(f"{prefix}|--- {feature_label} <= {node.threshold}")
+        self.print_tree(node.right, depth + 1, indent)
+
+        print(f"{prefix}|--- {feature_label} > {node.threshold}")
+        self.print_tree(node.left, depth + 1, indent)
     
     # ---- Validation Methods ------------------------------------------------------------------------
-    def _validate_train_data(self, X: np.ndarray, y: np.ndarray):
+    def _validate_train_data(self, X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         X = np.asarray(X)
         y = np.asarray(y)
         
@@ -49,7 +59,7 @@ class DecisionTreeClassifier:
             X = X.reshape(-1,1)
         
         if y.ndim != 1:
-            raise ValueError(f"y must be 1D array, got {y.ndim}D arrat!")
+            raise ValueError(f"y must be 1D array, got {y.ndim}D array!")
         
         if X.shape[0] != y.shape[0]:
             raise ValueError(f"X contains {X.shape[0]} samples, but y only has {y.shape[0]} samples!")
@@ -65,121 +75,127 @@ class DecisionTreeClassifier:
         
         return X, y
 
-    def _validate_predict_input(self):
-        pass
+    def _validate_predict_input(self, X: np.ndarray) -> np.ndarray:
+        X = np.asarray(X)
+
+        # checking for shapes & dimension
+        if X.ndim > 2:
+            raise ValueError(f"Expected 1D or 2D array, got {X.ndim}D array!")
+        
+        if X.ndim == 1:
+            X = X.reshape(1,-1)
+        
+        if X.shape[-1] != self.n_features:
+            raise ValueError(f"X has {X.shape[-1]} features, but the model was trained on {self.n_features} features!")
+        
+        # checking for dtype
+        if not np.issubdtype(X.dtype, np.number):
+            raise ValueError("X must contains numeric data!")
+        
+        return X
     
     # ---- Internal Methods ------------------------------------------------------------------------
-    def _compute_gini(self, r_counts: Counter, l_counts: Counter):
-        """
-        This function take of the right, and left leaves, then it computes the weighted
-        gini impurity for the split.
-        """
-        # counts of the right leaf
-        r_no, r_yes = r_counts[0], r_counts[1]
+    def _predict_one(self, x: np.ndarray) -> int:
+        node = self.root
+        while isinstance(node, Node):
+            if x[node.feature_idx] < node.threshold:
+                node = node.left
+            else:
+                node = node.right
+        return node.prediction
+    
+    def _compute_gini(self, r_counts: Counter, l_counts: Counter) -> float:
+        # total of each count
         r_total = r_counts.total()
-        
-        # counts of the left leaf
-        l_no, l_yes = l_counts[0], l_counts[1]
         l_total = l_counts.total()
         
         # total of samples
         total = r_total + l_total
         
         # gini impurity for each leaf
-        r_gi = 1 - (r_yes/r_total)**2 - (r_no/r_total)**2
-        l_gi = 1 - (l_yes/l_total)**2 - (l_no/l_total)**2
-
-        return r_gi * (r_total/total) + l_gi * (l_total/total)
+        r_gi = self._single_gini(r_counts)
+        l_gi = self._single_gini(l_counts)
+        w_gi = r_gi * (r_total/total) + l_gi * (l_total/total)
+        return w_gi
     
-    def _split(self, features: np.ndarray, target: np.ndarray) -> dict:
-        """
-        This function the best feature to split on.
-        """
-        # Initialize parameters
-        best_gini = np.inf
-        f_index = None
-        best_threshold = None
-        r_leaf = None
-        l_leaf = None
-        
-        # Splitting loop
-        for idx, feature in enumerate(features):
-            # for binary features
-            if np.array_equal(np.unique(feature), [0,1]):
-                threshold = 0.5
-                r_leaf = target[(feature == 1)]
-                l_leaf = target[(feature == 0)]
-                gi = self._compute_gini(Counter(r_leaf), Counter(l_leaf))
-            
-            # for non binary features
-            else:
-                # computing the thresholds
-                sorted_f = np.sort(feature)
-                means = np.unique((sorted_f[:-1] + sorted_f[1:])/2)
-                gini_impurity: list[float] = []
-
-                # determining the best threshold
-                for mean in means:
-                    r_leaf = target[(feature >= mean)]
-                    l_leaf = target[(feature < mean)]
-                    gini_impurity.append(self._compute_gini(Counter(r_leaf), Counter(l_leaf)))
-                min_index = np.argmin(gini_impurity)
-                gi = gini_impurity[min_index]
-                threshold = means[min_index]
-
-            # adjusting the parameters to the optimal values
-            if gi <= best_gini:
-                best_gini = gi
-                f_index = idx
-                best_threshold = threshold
-                right_leaf = r_leaf
-                left_leaf = l_leaf
-
-        return {
-            'feature_idx': f_index,
-            'gini_impurity': best_gini,
-            'threshold': float(best_threshold),
-            'r_leaf': right_leaf,
-            'l_leaf': left_leaf
+    def _split(self, X: np.ndarray, y: np.ndarray) -> dict:
+        best_split = {
+            "feature_idx": None,
+            "gini_impurity": np.inf,
+            "threshold": None,
+            "r_mask": None,
+            "l_mask": None
         }
-
-
-
-class DecisionTreeRegressor:
-    def __init__(
-            self,
-            criterion: str,
-            max_depth: int,
-            min_samples_split: int,
-            min_samples_leaf: int
-    ):
-        if criterion not in ['gini', 'entropy']:
-            raise ValueError(f"Criterion must be 'gini' or 'entropy', got {criterion}!")
         
-        names = ['max_depth', 'min_samples_split', 'min_samples_leaf']
-        for num, name in zip([max_depth, min_samples_split, min_samples_leaf], names):
-            if num <= 0:
-                raise ValueError(f"{name} must be >0, got {num}!")
-            
-        self.criterion= criterion
-        self.max_depth= max_depth
-        self.min_samples_split= min_samples_split
-        self.min_samples_leaf= min_samples_leaf
-     
-    def fit(self, X_train: np.ndarray, y_train: np.ndarray):
-        pass
+        for idx in range(self.n_features):
+            unique = np.unique(X[:,idx])
+            if len(unique) < 2:
+                continue
 
-    def predict(self):
-        pass
+            thresholds = (unique[1:] + unique[:-1])/2
+            for threshold in thresholds:
+                r_mask = X[:,idx] >= threshold
+                l_mask = ~r_mask
+                if r_mask.sum() < self.min_samples_leaf or l_mask.sum() < self.min_samples_leaf:
+                    continue
+                w_gi= self._compute_gini(Counter(y[r_mask]), Counter(y[l_mask]))
+                if w_gi <= best_split["gini_impurity"]:
+                    best_split.update({
+                        "feature_idx": idx,
+                        "gini_impurity": w_gi,
+                        "threshold": threshold,
+                        "r_mask": r_mask,
+                        "l_mask": l_mask,
+                    })
 
-    def predict_proba(self):
-        pass
+        return best_split
+    
+    def _build_tree(self, X: np.ndarray, y: np.ndarray, depth: int= 0) -> 'Node | Leaf':
+        if depth >= self.max_depth:
+            return Leaf(prediction= self._majority_class(y))
+        
+        if len(y) < self.min_samples_split:
+            return Leaf(prediction= self._majority_class(y))
+        
+        if len(np.unique(y)) == 1:
+            return Leaf(prediction= y[0])
+        
+        best_split = self._split(X, y)
 
-    def get_rapport(self):
-        pass
+        if best_split["feature_idx"] is None:
+            return Leaf(prediction=self._majority_class(y))
 
-    def _validate_train_data(self):
-        pass
+        l_mask = best_split['l_mask']
+        r_mask = best_split['r_mask']
+        
+        right = self._build_tree(X[r_mask], y[r_mask], depth+1)
+        left = self._build_tree(X[l_mask], y[l_mask], depth+1)
+    
+        return Node(
+            feature_idx= best_split['feature_idx'],
+            threshold= best_split['threshold'],
+            left= left,
+            right= right
+        )
+    
+    @staticmethod
+    def _single_gini(counts: Counter) -> float:
+        total = counts.total()
+        if total == 0:
+            return 0
+        return 1 - sum((c/total)**2 for c in counts.values())
+    
+    @staticmethod
+    def _majority_class(y: Counter) -> int:
+        return Counter(y).most_common(1)[0][0]
 
-    def _validate_predict_input(self):
-        pass
+class Node:
+    def __init__(self, feature_idx=None, threshold=None, left=None, right=None):
+        self.feature_idx = feature_idx
+        self.threshold = threshold
+        self.left = left
+        self.right = right
+
+class Leaf:
+    def __init__(self, prediction):
+        self.prediction = prediction
