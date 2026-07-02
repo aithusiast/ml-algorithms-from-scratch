@@ -27,7 +27,7 @@ class DecisionTreeClassifier:
     
     def predict(self, X: np.ndarray) -> list[int]:
         X = self._validate_predict_input(X)
-        predictions = [self._predict_one(x) for x in X]
+        predictions = np.array([self._predict_one(x) for x in X])
         return predictions
 
     def print_tree(self, node=None, depth=0, indent="|   "):
@@ -102,7 +102,7 @@ class DecisionTreeClassifier:
                 node = node.left
             else:
                 node = node.right
-        return node.prediction
+        return int(node.prediction)
     
     def _compute_gini(self, r_counts: Counter, l_counts: Counter) -> float:
         # total of each count
@@ -199,3 +199,62 @@ class Node:
 class Leaf:
     def __init__(self, prediction):
         self.prediction = prediction
+
+# _______ Evaluation Metrics ________________________________________________________
+
+class Metrics:
+     
+    @staticmethod
+    def compute_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
+        if len(y_true) != len(y_pred):
+            raise ValueError(
+                "y_true and y_pred must have the same length."
+            )
+        TP = np.sum((y_true == 1) & (y_pred == 1))
+        FP = np.sum((y_true == 0) & (y_pred == 1))
+        FN = np.sum((y_true == 1) & (y_pred == 0))
+        TN = np.sum((y_true == 0) & (y_pred == 0))
+
+        return {
+            'TP': int(TP),
+            'FP': int(FP),
+            'FN': int(FN),
+            'TN': int(TN),
+            'matrix': np.array([
+                [TN, FP],
+                [FN, TP]
+            ])
+        }
+    
+    @classmethod
+    def accuracy(cls, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        cm = cls.compute_confusion_matrix(y_true, y_pred)
+        TP = cm['TP']
+        FP = cm['FP']
+        FN = cm['FN']
+        TN = cm['TN']
+
+        return (TP + TN) / (TP + FP + FN + TN)
+
+    @classmethod
+    def precision(cls, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        cm = cls.compute_confusion_matrix(y_true, y_pred)
+        TP = cm['TP']
+        FP = cm['FP']
+
+        return TP / (TP + FP) if (TP + FP) != 0 else 0
+
+    @classmethod
+    def recall(cls, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        cm = cls.compute_confusion_matrix(y_true, y_pred)
+        TP = cm['TP']
+        FN = cm['FN']
+
+        return TP / (TP + FN) if (TP + FN) != 0 else 0
+
+    @classmethod
+    def f1_score(cls, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        p = cls.precision(y_true, y_pred)
+        r = cls.recall(y_true, y_pred)
+
+        return (2 * p * r) / (p + r) if (p + r) != 0 else 0
