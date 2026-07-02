@@ -199,6 +199,10 @@ class Metrics:
      
     @staticmethod
     def compute_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
+        if len(y_true) != len(y_pred):
+            raise ValueError(
+                "y_true and y_pred must have the same length."
+            )
         TP = np.sum((y_true == 1) & (y_pred == 1))
         FP = np.sum((y_true == 0) & (y_pred == 1))
         FN = np.sum((y_true == 1) & (y_pred == 0))
@@ -226,7 +230,7 @@ class Metrics:
         return (TP + TN) / (TP + FP + FN + TN)
 
     @classmethod
-    def precison(cls, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    def precision(cls, y_true: np.ndarray, y_pred: np.ndarray) -> float:
         cm = cls.compute_confusion_matrix(y_true, y_pred)
         TP = cm['TP']
         FP = cm['FP']
@@ -243,7 +247,7 @@ class Metrics:
 
     @classmethod
     def f1_score(cls, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        p = cls.precison(y_true, y_pred)
+        p = cls.precision(y_true, y_pred)
         r = cls.recall(y_true, y_pred)
 
         return (2 * p * r) / (p + r) if (p + r) != 0 else 0
